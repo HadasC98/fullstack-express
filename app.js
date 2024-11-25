@@ -27,7 +27,7 @@ const client = new MongoClient(connectionURI, {
   }
 });
 
-let db; 
+let db; // Database reference
 
 client.connect()
   .then(() => {
@@ -57,6 +57,23 @@ app.get('/api/lessons', async (req, res) => {
   } catch (error) {
     console.error('Error fetching lessons', error);
     res.status(500).send('Error fetching lessons');
+  }
+});
+
+// Update stock on removal from cart (POST request)
+app.post('/api/cart/remove', async (req, res) => {
+  const { lessonId, quantity } = req.body;
+  console.log("POST request to /api/cart/remove");
+
+  try {
+    await db.collection('lessons').updateOne(
+      { _id: lessonId },
+      { $inc: { stock: quantity } }
+    );
+    res.status(200).json({ message: 'Stock updated' });
+  } catch (error) {
+    console.error('Error updating stock on removal:', error);
+    res.status(500).json({ message: 'Error updating stock' });
   }
 });
 
