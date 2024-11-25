@@ -1,10 +1,13 @@
 import { MongoClient, ServerApiVersion } from 'mongodb';
 import bodyParser from 'body-parser';
 import express from 'express';
-import cors from 'cors';
 
 const app = express();
 const port = 5000;
+
+import cors from 'cors';
+app.use(cors());
+app.use(bodyParser.json());
 
 // MongoDB connection details
 const password = "Ncohen98";
@@ -27,7 +30,7 @@ const client = new MongoClient(connectionURI, {
   }
 });
 
-let db; // Database reference
+let db; 
 
 client.connect()
   .then(() => {
@@ -39,32 +42,54 @@ client.connect()
     process.exit(1);
   });
 
-app.use(cors());
-app.use(bodyParser.json()); // Use body-parser to parse JSON
-
-// Debugging: Logs every incoming request
-app.use((req, res, next) => {
-  console.log(`Received ${req.method} request for ${req.originalUrl}`);
-  next();
-});
-
-// Fetch lessons (GET request)
+// Fetch lessons
 app.get('/api/lessons', async (req, res) => {
-  console.log("GET request to /api/lessons");
   try {
     const lessons = await db.collection('lessons').find({}).toArray();
     res.json(lessons);
   } catch (error) {
-    console.error('Error fetching lessons', error);
     res.status(500).send('Error fetching lessons');
   }
 });
 
-// Update stock on removal from cart (POST request)
+// Finalize order, update stock and return updated products
+app.post('/api/orders', async (req, res) => {
+  const { user, cart, totalPrice } = req.body;
+  try {
+    // Update stock for each item in the cart
+    for (const item of cart) {
+      const product = await db.collection('lessons').findOne({ _id: item._id });
+      if (product) {
+        product.stock -= item.quantity;
+        await db.collection('lessons').updateOne({ _id: item._id }, { $set: { stock: product.stock } });
+      }
+    }
+
+    // Insert the order into the orders collection
+    await db.collection('orders').insertOne({
+      user,
+      cart,
+      totalPrice,
+      date: new Date()
+    });
+
+    // Fetch updated products
+    const updatedProducts = await db.collection('lessons').find({}).toArray();
+
+    // Send response with success message and updated products
+    res.status(200).json({
+      message: 'Order placed successfully!',
+      updatedProducts, // Send back updated products with updated stock
+    });
+  } catch (error) {
+    console.error('Error processing order:', error);
+    res.status(500).json({ error: 'Failed to process order' });
+  }
+});
+
+// Update stock on removal from cart
 app.post('/api/cart/remove', async (req, res) => {
   const { lessonId, quantity } = req.body;
-  console.log("POST request to /api/cart/remove");
-
   try {
     await db.collection('lessons').updateOne(
       { _id: lessonId },
@@ -72,17 +97,10 @@ app.post('/api/cart/remove', async (req, res) => {
     );
     res.status(200).json({ message: 'Stock updated' });
   } catch (error) {
-    console.error('Error updating stock on removal:', error);
     res.status(500).json({ message: 'Error updating stock' });
   }
 });
 
-// Root route for testing
-app.get('/', (req, res) => {
-  res.send('Welcome to the lessons shop API!');
-});
-
-// Start the server
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });
