@@ -42,6 +42,11 @@ client.connect()
     process.exit(1);
   });
 
+// Root route
+app.get('/', (req, res) => {
+  res.send('Welcome to the Lesson Shop API');
+});
+
 // Fetch lessons
 app.get('/api/lessons', async (req, res) => {
   try {
@@ -52,11 +57,21 @@ app.get('/api/lessons', async (req, res) => {
   }
 });
 
-// Finalize order, update stock and return updated products
+// Fetch orders
+app.get('/api/orders', async (req, res) => {
+  try {
+    const orders = await db.collection('orders').find({}).toArray();
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching orders' });
+  }
+});
+
+// Finalize order, update stock and return updated lessons
 app.post('/api/orders', async (req, res) => {
   const { user, cart, totalPrice } = req.body;
   try {
-    // Update stock for each item in the cart
+    // Updates stock for each item in the cart
     for (const item of cart) {
       const product = await db.collection('lessons').findOne({ _id: item._id });
       if (product) {
@@ -73,13 +88,13 @@ app.post('/api/orders', async (req, res) => {
       date: new Date()
     });
 
-    // Fetch updated products
-    const updatedProducts = await db.collection('lessons').find({}).toArray();
+    // Fetch updated lessons
+    const updatedLessons = await db.collection('lessons').find({}).toArray();
 
-    // Send response with success message and updated products
+    // Sends response with success message and updated lessons
     res.status(200).json({
       message: 'Order placed successfully!',
-      updatedProducts, // Send back updated products with updated stock
+      updatedLessons, // Send back updated products with updated stock
     });
   } catch (error) {
     console.error('Error processing order:', error);
