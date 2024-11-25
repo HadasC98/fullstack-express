@@ -27,6 +27,8 @@ const client = new MongoClient(connectionURI, {
   }
 });
 
+let db; 
+
 client.connect()
   .then(() => {
     db = client.db('lessonShop');
@@ -44,6 +46,18 @@ app.use(bodyParser.json()); // Use body-parser to parse JSON
 app.use((req, res, next) => {
   console.log(`Received ${req.method} request for ${req.originalUrl}`);
   next();
+});
+
+// Fetch lessons (GET request)
+app.get('/api/lessons', async (req, res) => {
+  console.log("GET request to /api/lessons");
+  try {
+    const lessons = await db.collection('lessons').find({}).toArray();
+    res.json(lessons);
+  } catch (error) {
+    console.error('Error fetching lessons', error);
+    res.status(500).send('Error fetching lessons');
+  }
 });
 
 // Root route for testing
