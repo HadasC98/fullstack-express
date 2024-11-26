@@ -8,31 +8,19 @@ import { fileURLToPath } from 'url';
 const app = express();
 const port = 5000;
 
-// MongoDB connection
-const password = "Ncohen98";
-const userName = "hc820";
-const server = "m00917628.xhltf9o.mongodb.net";
-
-const encodedUsername = encodeURIComponent(userName);
-const encodedPassword = encodeURIComponent(password);
-
-const connectionURI = `mongodb+srv://${encodedUsername}:${encodedPassword}@${server}/?retryWrites=true&w=majority`;
-const client = new MongoClient(connectionURI, {
-  useUnifiedTopology: true
-});
-
 // Middleware
 app.use(cors());
 
 app.use(cors({
-    origin: 'https://HadasC98.github.io',
-    methods: ['GET', 'POST', 'PATCH']
-  }));
-  
-  const API_BASE_URL = process.env.NODE_ENV === 'production'
-      ? 'https://fullstack-express-9dbh.onrender.com'
-      : 'http://localhost:5000';
-  
+  origin: ['http://localhost:8080', 'https://hadasc98.github.io'], // Allow these origins
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],             // Allowed methods
+  credentials: true                                               // Allow cookies, if needed
+}));
+
+const API_BASE_URL = process.env.NODE_ENV === 'production'
+    ? 'https://fullstack-express-9dbh.onrender.com'
+    : 'http://localhost:5000';
+
 app.use(bodyParser.json());
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -53,6 +41,19 @@ app.get('/', (req, res) => {
   res.send('Welcome to the Lesson Shop API');
 });
 
+// MongoDB connection
+const password = "Ncohen98";
+const userName = "hc820";
+const server = "m00917628.xhltf9o.mongodb.net";
+
+const encodedUsername = encodeURIComponent(userName);
+const encodedPassword = encodeURIComponent(password);
+
+const connectionURI = `mongodb+srv://${encodedUsername}:${encodedPassword}@${server}/?retryWrites=true&w=majority`;
+const client = new MongoClient(connectionURI, {
+  useUnifiedTopology: true
+});
+
 let db;
 
 client.connect()
@@ -65,16 +66,21 @@ client.connect()
     process.exit(1);
   });
 
+// Routes
+
 // GET /api/lessons - Retrieve all lessons
 app.get('/api/lessons', async (req, res) => {
   try {
+    console.log('Fetching lessons from database...');
     const lessons = await db.collection('lessons').find({}).toArray();
+    console.log('Lessons retrieved:', lessons);
     res.json(lessons);
   } catch (error) {
     console.error('Error fetching lessons:', error.message);
     res.status(500).send('Error fetching lessons');
   }
 });
+
 
 // POST /api/orders - Place a new order
 app.post('/api/orders', async (req, res) => {
