@@ -1,36 +1,49 @@
-import { MongoClient, ServerApiVersion } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import bodyParser from 'body-parser';
 import express from 'express';
+import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 const port = 5000;
 
-import cors from 'cors';
-app.use(cors());
-app.use(bodyParser.json());
-
-// MongoDB connection details
+// MongoDB connection
 const password = "Ncohen98";
 const userName = "hc820";
 const server = "m00917628.xhltf9o.mongodb.net";
 
-// Encode special characters
 const encodedUsername = encodeURIComponent(userName);
 const encodedPassword = encodeURIComponent(password);
 
-// Create connection URI
-const connectionURI = `mongodb+srv://${encodedUsername}:${encodedPassword}@${server}/?retryWrites=true&w=majority&appName=M00917628`;
-
-// Set up MongoDB client
+const connectionURI = `mongodb+srv://${encodedUsername}:${encodedPassword}@${server}/?retryWrites=true&w=majority`;
 const client = new MongoClient(connectionURI, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: false,
-    deprecationErrors: true,
-  }
+  useUnifiedTopology: true
 });
 
-let db; 
+// Middleware
+app.use(cors());
+app.use(bodyParser.json());
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Static file middleware for images
+app.use('/img', express.static(path.join(__dirname, 'img')));
+app.use('/img', (req, res) => {
+  res.status(404).send('Image not found');
+});
+
+// Home route
+app.get('/', (req, res) => {
+  res.send('Welcome to the Lesson Shop API');
+});
+
+let db;
 
 client.connect()
   .then(() => {
@@ -42,80 +55,81 @@ client.connect()
     process.exit(1);
   });
 
-// Root route
-app.get('/', (req, res) => {
-  res.send('Welcome to the Lesson Shop API');
-});
-
-// Fetch lessons
+// GET /api/lessons - Retrieve all lessons
 app.get('/api/lessons', async (req, res) => {
   try {
     const lessons = await db.collection('lessons').find({}).toArray();
     res.json(lessons);
   } catch (error) {
+    console.error('Error fetching lessons:', error.message);
     res.status(500).send('Error fetching lessons');
   }
 });
 
-// Fetch orders
-app.get('/api/orders', async (req, res) => {
-  try {
-    const orders = await db.collection('orders').find({}).toArray();
-    res.json(orders);
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching orders' });
-  }
-});
-
-// Finalize order, update stock and return updated lessons
+// POST /api/orders - Place a new order
 app.post('/api/orders', async (req, res) => {
-  const { user, cart, totalPrice } = req.body;
+  const { name, phoneNumber, lessonIDs, numberOfSpaces } = req.body;
+
+  // Validate request body
+  if (!name || !phoneNumber || !Array.isArray(lessonIDs) || !Array.isArray(numberOfSpaces) || lessonIDs.length !== numberOfSpaces.length) {
+    return res.status(400).send('Invalid request body');
+  }
+
   try {
-    // Updates stock for each item in the cart
-    for (const item of cart) {
-      const product = await db.collection('lessons').findOne({ _id: item._id });
-      if (product) {
-        product.stock -= item.quantity;
-        await db.collection('lessons').updateOne({ _id: item._id }, { $set: { stock: product.stock } });
+    // Fetch lessons from the database
+    const lessons = await db.collection('lessons').find({
+      _id: { $in: lessonIDs.map(id => new ObjectId(id)) }
+    }).toArray();
+
+    // Check if lessons have enough space
+    for (let i = 0; i < lessons.length; i++) {
+      if (lessons[i].space < numberOfSpaces[i]) {
+        return res.status(400).send(`Not enough space for lesson: ${lessons[i].topic}`);
       }
     }
 
-    // Insert the order into the orders collection
-    await db.collection('orders').insertOne({
-      user,
-      cart,
-      totalPrice,
-      date: new Date()
-    });
+    // Update lesson spaces
+    for (let i = 0; i < lessons.length; i++) {
+      await db.collection('lessons').updateOne(
+        { _id: lessons[i]._id },
+        { $inc: { space: -numberOfSpaces[i] } }
+      );
+    }
 
-    // Fetch updated lessons
-    const updatedLessons = await db.collection('lessons').find({}).toArray();
+    // Insert the new order into the orders collection
+    await db.collection('orders').insertOne({ name, phoneNumber, lessonIDs, numberOfSpaces });
 
-    // Sends response with success message and updated lessons
-    res.status(200).json({
-      message: 'Order placed successfully!',
-      updatedLessons, // Send back updated products with updated stock
-    });
+    res.status(200).send('Order placed successfully');
   } catch (error) {
-    console.error('Error processing order:', error);
-    res.status(500).json({ error: 'Failed to process order' });
+    console.error('Error placing order:', error.message);
+    res.status(500).send('Error placing order');
   }
 });
 
-// Update stock on removal from cart
-app.post('/api/cart/remove', async (req, res) => {
-  const { lessonId, quantity } = req.body;
+// PUT /api/lessons/:id - Update lesson details
+app.put('/api/lessons/:id', async (req, res) => {
+  const { id } = req.params;
+  const { updates } = req.body;
+
+  // Validate updates
+  if (!updates || typeof updates !== 'object') {
+    return res.status(400).send('Invalid updates');
+  }
+
   try {
+    // Update the lesson in the database
     await db.collection('lessons').updateOne(
-      { _id: lessonId },
-      { $inc: { stock: quantity } }
+      { _id: new ObjectId(id) },
+      { $set: updates }
     );
-    res.status(200).json({ message: 'Stock updated' });
+    res.status(200).send('Lesson updated successfully');
   } catch (error) {
-    res.status(500).json({ message: 'Error updating stock' });
+    console.error('Error updating lesson:', error.message);
+    res.status(500).send('Error updating lesson');
   }
 });
 
+// Start the server
 app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+  console.log(`Server running at http://localhost:${port}`);
 });
