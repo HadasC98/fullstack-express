@@ -23,6 +23,16 @@ const client = new MongoClient(connectionURI, {
 
 // Middleware
 app.use(cors());
+
+app.use(cors({
+    origin: 'https://HadasC98.github.io',
+    methods: ['GET', 'POST', 'PATCH']
+  }));
+  
+  const API_BASE_URL = process.env.NODE_ENV === 'production'
+      ? 'https://fullstack-express-9dbh.onrender.com'
+      : 'http://localhost:5000';
+  
 app.use(bodyParser.json());
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
