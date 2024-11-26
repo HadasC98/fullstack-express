@@ -145,6 +145,29 @@ app.put('/api/lessons/:id', async (req, res) => {
   }
 });
 
+// POST /api/users - Create a new user
+app.post('/api/users', async (req, res) => {
+  const { name, phone, email, address } = req.body;
+
+  // Validate request body
+  if (!name || !phone || !email || !address) {
+    return res.status(400).send('Missing required fields');
+  }
+
+  try {
+    // Insert user into the 'users' collection
+    const result = await db.collection('users').insertOne({ name, phone, email, address });
+
+    res.status(201).json({
+      message: 'User created successfully',
+      userId: result.insertedId
+    });
+  } catch (error) {
+    console.error('Error creating user:', error.message);
+    res.status(500).send('Error creating user');
+  }
+});
+
 // Start the server
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
